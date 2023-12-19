@@ -70,7 +70,7 @@ int ketinggian;
 int tinggiair;
 float persentase;
 String kondisi="Normal";
-String status="Normal";
+String setatus="Normal";
 #define motorPin1 0 // IN1 pada D3
 #define motorPin2 2 // IN2 pada D4
 #define motorPin3 14 // IN3 pada D5
@@ -128,8 +128,7 @@ void loop() {
     ketinggian = 18;
     duration = pulseIn(echoPin, HIGH);
     distance = duration * 0.034 / 2;
-    //tinggiair = ketinggian - distance;
-    tinggiair = random(5,13);
+    tinggiair = ketinggian - distance;
 
     persentase = ((static_cast<float>(tinggiair) / ketinggian) * 100);
 
@@ -138,18 +137,16 @@ void loop() {
 
     
     if (tinggiair >= 12) {
-      status = String("Waspada Banjir");
+      setatus = String("Waspada Banjir");
       motorMovementFlag = 1;
       if (tinggiair >= 12 && motorMovementFlag == 1) {
         Serial.println("Motor bergerak 3 putaran");
-        if (!stepper1.isRunning()) {
-          stepper1.moveTo(0);
-        }
+        stepper1.moveTo(0);
       }
     }else if (tinggiair > 7 && tinggiair < 12) {
-      status = String("Siaga Banjir");
+      setatus = String("Siaga Banjir");
     }else if (tinggiair <= 7) {
-      status = String("Aman");
+      setatus = String("Aman");
       motorMovementFlag = 0;
       if (tinggiair <= 7 && motorMovementFlag == 0) {
         unsigned long currentMillis = millis();
@@ -161,11 +158,11 @@ void loop() {
       }
     }
 
-    tb.sendTelemetryData("status", status.c_str());
+    tb.sendTelemetryData("status", setatus.c_str());
     
-    if(status != kondisi){
-      if((status ="Waspada Banjir") && (tinggiair>=12)){
-        mail(tinggiair, status);
+    if(setatus != kondisi){
+      if((setatus ="Waspada Banjir") && (tinggiair>=12)){
+        mail(tinggiair, setatus);
       }        
     }
     
@@ -180,25 +177,30 @@ void loop() {
     }
   stepper1.runToPosition();
   tb.loop();
-  delay(10000);
+  delay(5000);
 }
 
-void mail(int tinggiair, String status) {
+void mail(int tinggiair, String setatus) {
   // Buat URL dengan memasukkan nilai variabel
-  String emailStatus = status;
+  String emailStatus = setatus;
   emailStatus.replace(" ", "%20");
   String url = String(serverURL) + "?ketinggian=" + String(tinggiair) + "&status=" + String(emailStatus) + "&lokasi=Gerbang%20Citarum";
 
   Serial.print("Connecting to ");
   Serial.println(url);
 
+  if (!wifiClient.connect(serverURL, 80)) {
+    Serial.println("Connection failed.");
+    return;
+  }
+
   // Kirim permintaan HTTP GET
   if (http.begin(wifiClient, url)) {
     int httpCode = http.GET();
 
     // Cek status koneksi dan tampilkan hasil
+    Serial.printf("[HTTP] GET... code: %d\n", httpCode);
     if (httpCode > 0) {
-      Serial.printf("[HTTP] GET... code: %d\n", httpCode);
       if (httpCode == HTTP_CODE_OK) {
         String payload = http.getString();
         Serial.println(payload);
@@ -209,7 +211,11 @@ void mail(int tinggiair, String status) {
 
     // Selesai dengan koneksi
     http.end();
+    delay(1000);
   } else {
     Serial.printf("[HTTP] Unable to connect\n");
   }
+
+  wifiClient.stop();  // Hentikan koneksi setelah penggunaan
 }
+
